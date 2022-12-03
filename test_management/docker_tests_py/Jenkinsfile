@@ -1,0 +1,118 @@
+#!/usr/bin/env groovy
+
+//Prepare sources
+def buildStageDirName = 'build_stage';
+def gitBranch = '';
+def dockerRegistry = "${env.CBD_ENV_DOCKER_REGISTRY_DEFAULT}";
+def serviceName = 'VIAM';
+
+pipeline {
+  agent { label('docker-build') }
+
+  options {
+    disableConcurrentBuilds();
+    timestamps();
+    ansiColor('xterm');
+
+    gitLabConnection('Gitlab@name');
+  }
+
+  stages {
+    stage('Init') {
+      steps {
+        script {
+          buildStageDir = buildStageDirName;
+          dir(buildStageDirName) { buildStageDir = sh(returnStdout: true, script: 'pwd -P').trim(); }
+
+          sh """
+            rm -fr ${buildStageDir}
+            mkdir -vp "${buildStageDir}"
+          """;
+
+          dir(buildStageDir) {
+            checkout scm;
+            sh """
+              make configure
+            """;
+            gitBranch = env.GIT_BRANCH
+            currentBuild.displayName = "#${BUILD_NUMBER} - ${gitBranch}";
+          }
+        }
+      }
+    }
+
+    stage('Create image for base') {
+      steps {
+        script {
+          dir(buildStageDir) {
+            try {
+              sh """
+                docker rmi dummies-${serviceName}-base || true
+                docker build --target base -t dummies-${serviceName}-base .
+              """
+            } catch(e) {
+              currentBuild.result = 'FAILURE';
+            }
+          }
+          !currentBuild.result ?: error()
+        }
+      }
+    }
+
+    stage('Collecting information') {
+      steps {
+        script {
+          dir(buildStageDir) {
+            try {
+              sh """
+                docker rmi dummies-${serviceName}-test || true
+                docker build --target test -t dummies-${serviceName}-test .
+                docker run --rm dummies-${serviceName}-test > reports.tar
+                tar -xvf reports.tar -C ${workspace}
+              """
+            } catch(e) {
+              currentBuild.result = 'FAILURE';
+            }
+          }
+          !currentBuild.result ?: error()
+        }
+      }
+    }
+
+    stage('Push image') {
+      steps {
+        script {
+          sh """
+            docker tag dummies-${serviceName}-base:latest ${dockerRegistry}/dummies-${serviceName}-base:latest
+            docker push ${dockerRegistry}/dummies-${serviceName}-base:latest
+          """
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      echo "Running post-build tasks"
+      junit allowEmptyResults: true, testResults: 'make_test_results.xml';
+      step([
+          $class: 'CoberturaPublisher',
+          autoUpdateHealth: false,
+          autoUpdateStability: false,
+          failNoReports: false,
+          coberturaReportFile: 'make_coverage_results.xml',
+          failUnhealthy: false,
+          failUnstable: false,
+          maxNumberOfBuilds: 0,
+          onlyStable: false,
+          sourceEncoding: 'ASCII',
+          zoomCoverageChart: false
+      ])
+    }
+
+    cleanup {
+      echo 'Clean-up workspace'
+      cleanWs()
+    }
+  }
+}
