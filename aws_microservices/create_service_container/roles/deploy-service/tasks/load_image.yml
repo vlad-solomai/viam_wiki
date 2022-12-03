@@ -1,0 +1,6 @@
+--- 
+- name: Load image from artifact 
+  docker_image: 
+    name: "{{ repo_url }}/{{ image_name }}" 
+    tag: "{{ image_tag }}" 
+    load_path: "{{ destination_for_artifact }}/{{ image_name }}-{{ image_tag }}.tar" 

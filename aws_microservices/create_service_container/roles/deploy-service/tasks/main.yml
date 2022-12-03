@@ -1,0 +1,5 @@
+--- 
+- include_tasks: copy_artifact.yml 
+- include_tasks: load_image.yml 
+- include_tasks: create_container.yml 
+- include_tasks: remove_artifact.yml 

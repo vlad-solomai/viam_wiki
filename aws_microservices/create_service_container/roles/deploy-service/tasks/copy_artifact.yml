@@ -1,0 +1,16 @@
+--- 
+- name: Copy image to host for deployment 
+  copy: 
+    src: "{{ image_name }}-{{ image_tag }}.tar" 
+    dest: "{{ destination_for_artifact }}" 
+ 
+- name: Create a directory for properties 
+  file: 
+    path: "/opt/axsys/{{ image_name }}-3" 
+    state: directory 
+    mode: "0775" 
+ 
+- name: Copy properties to host 
+  copy: 
+    src: gameiom-session-service.properties 
+    dest: "/opt/axsys/{{ image_name }}-3" 

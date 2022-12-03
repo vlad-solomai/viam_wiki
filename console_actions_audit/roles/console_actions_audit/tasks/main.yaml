@@ -1,0 +1,47 @@
+---
+- name: Create a working directory for console audit
+  file:
+    path: '{{ item  }}'
+    state: directory
+    mode: '0755'
+  with_items:
+  - '{{ dest_dir }}'
+
+- name: Copy console audit script
+  copy:
+    src: global_profile_audit.sh
+    dest: '{{ dest_dir }}'
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Create backup of root profile
+  shell: cp '{{ item  }}' '{{ dest_dir }}'
+  with_items:
+  - /etc/profile
+  - /etc/rsyslog.conf
+
+- name: Modify /etc/profile file
+  shell: "cat '{{ dest_dir }}'/global_profile_audit.sh >> /etc/profile"
+
+- name: Create console audit log
+  shell: sed -i '/log\/boot.log/a local7.notice '{{ dest_dir }}'/console_audit.log' /etc/rsyslog.conf
+
+- name: Disable logging from messages
+  shell: sed -i 's/cron.none\b/&;local7.!notice/' /etc/rsyslog.conf
+
+- name: Restart rsyslog service
+  service: 
+    name: rsyslog
+    state: restarted
+
+- name: Reset bash profile
+  shell: "source /etc/profile"
+
+- name: Copy nginx rotation config
+  copy:
+    src: console_audit
+    dest: /etc/logrotate.d/
+    owner: root
+    group: root
+    mode: '0644'

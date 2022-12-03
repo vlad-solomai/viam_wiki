@@ -1,0 +1,5 @@
+--- 
+- name: Clean artifact 
+  file: 
+    path: "{{ destination_for_artifact }}/{{ image_name }}-{{ image_tag }}.tar" 
+    state: absent 
