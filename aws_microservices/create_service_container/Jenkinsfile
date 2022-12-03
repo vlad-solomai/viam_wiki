@@ -1,0 +1,79 @@
+#!/usr/bin/env groovy 
+ 
+def buildStageDirName = 'build_stage'; 
+def gitBranch = 'test'; 
+ 
+def imageName = params.ImageName; 
+def imageTag = params.ImageTag; 
+def targetHost = params.DeploymentHost; 
+ 
+def awsEcr = 'dkr.ecr.eu-west-1.amazonaws.com'; 
+def awsRegion = 'eu-west-1'; 
+def awsUser = 'jenkins_ecr'; 
+def codecommitUrl = 'ssh://git-codecommit.eu-west-1.amazonaws.com/v1/repos/microservices';
+
+pipeline {
+    agent any
+
+    options {
+        disableConcurrentBuilds();
+        timestamps();
+    }
+
+    stages {
+        stage ('Init') {
+            steps {
+                script {
+                    dir(buildStageDirName) {
+                        git branch: gitBranch, url: codecommitUrl, credentialsId: "jenkins_build-at-429849558428";
+                        println "repository is using now";
+                        currentBuild.displayName = "#${BUILD_NUMBER} - ${gitBranch}";
+                        println "Init stage was finished";
+                    }
+                }
+            }
+        }
+
+        stage ('Pull image from ERC') {
+            steps {
+                script {
+                    dir(buildStageDirName) {
+                        def awsEcrUrl = 'https://' + awsEcr;
+                        def awsEcrLogin = 'ecr:' + awsRegion + ':' + awsUser;
+                        docker.withRegistry(awsEcrUrl, awsEcrLogin) {
+                            sh """
+                                docker pull ${awsEcr}/${imageName}:${imageTag}
+                                docker save -o ${imageName}-${imageTag}.tar ${awsEcr}/${imageName}:${imageTag}
+                            """
+                        }
+                    }
+                }
+            }
+        }
+
+        stage ('Create container') {
+            steps {
+                script {
+                    dir(buildStageDirName) {
+                        sh """
+                            ansible-playbook -vvv -i hosts -u jenkins deploy-gameiom-session-service.yml \
+                            -e "target=${targetHost} image_name=${imageName} image_tag=${imageTag} repo_url=${awsEcr}"
+                        """
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            echo 'Removing created images'
+            sh "docker rmi ${awsEcr}/${imageName}:${imageTag} || true"
+        }
+
+        cleanup {
+            echo 'Clean-up workspace'
+            cleanWs()
+        }
+    }
+}

@@ -1,0 +1,6 @@
+---
+- hosts: "{{ hosts }}"
+  sudo: yes
+  gather_facts: yes
+  roles:
+    - configure_console_audit

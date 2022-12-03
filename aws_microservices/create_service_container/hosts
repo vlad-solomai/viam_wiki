@@ -1,0 +1,2 @@
+[all] 
+docker ansible_host=8.8.8.8

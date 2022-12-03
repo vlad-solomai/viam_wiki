@@ -1,0 +1,6 @@
+/var/log/gameiom/console_audit/console_audit.log {
+  daily
+  rotate 60
+  compress
+  missingok
+}

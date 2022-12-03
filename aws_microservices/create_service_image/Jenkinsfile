@@ -1,0 +1,88 @@
+#!/usr/bin/env groovy
+
+def buildStageDirName = 'build_stage';
+def gitBranch = params.BRANCH.replaceAll("origin/", "");
+def imageTag = '';
+def imageName = '';
+def awsEcr = 'dkr.ecr.eu-west-1.amazonaws.com';
+def awsRegion = 'eu-west-1';
+def awsUser = 'jenkins';
+def codecommitUrl = 'ssh://git-codecommit.eu-west-1.amazonaws.com/v1/repos/service';
+
+pipeline {
+    agent any
+
+    options {
+        disableConcurrentBuilds();
+        timestamps();
+    }
+
+    stages {
+        stage ('Init') {
+            steps {
+                script {
+                    dir(buildStageDirName) {
+                        git branch: gitBranch, url: codecommitUrl, credentialsId: "jenkins";
+                        println "repository is using now";
+                        currentBuild.displayName = "#${BUILD_NUMBER} - ${gitBranch}";
+                        sh """
+                            export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-11.0.5.10-0.el7_7.x86_64
+                            /var/lib/jenkins/tools/hudson.tasks.Maven_MavenInstallation/Maven-3.5/bin/mvn -f=pom.xml clean install -X
+                        """
+                        def pom = readMavenPom file: 'pom.xml';
+                        imageName = pom.artifactId;
+                        println "Name for image will be: ${imageName}";
+                        imageTag = pom.version + "_" + gitBranch;
+                        println "Tag for image will be: ${imageTag}";
+                        println "Init stage was finished";
+                    }
+                }
+            }
+        }
+
+        stage ('Build image') {
+            steps {
+                script {
+                    dir(buildStageDirName) {
+                        try {
+                            docker.build(imageName);
+                        } catch(e) {
+                            currentBuild.result = 'FAILURE';
+                        }
+                    }
+                    !currentBuild.result ?: error()
+                }
+            }
+        }
+
+        stage ('Push image into ERC') {
+            steps {
+                script {
+                    dir(buildStageDirName) {
+                        def awsEcrUrl = 'https://' + awsEcr;
+                        def awsEcrLogin = 'ecr:' + awsRegion + ':' + awsUser;
+                        docker.withRegistry(awsEcrUrl, awsEcrLogin) {
+                            docker.image(imageName).push(imageTag)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "Removing variable for JAVA_HOME 11"
+            sh "unset JAVA_HOME"
+            echo 'Removing created images'
+            sh """
+                docker rmi ${imageName} || true
+                docker rmi ${awsEcr}/${imageName}:${imageTag} || true
+            """
+        }
+        cleanup {
+            echo 'Clean-up workspace'
+            cleanWs()
+        }
+    }
+}

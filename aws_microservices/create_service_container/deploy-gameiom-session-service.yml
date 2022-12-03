@@ -1,0 +1,4 @@
+- hosts: "{{ target }}" 
+  gather_facts: false 
+  roles: 
+    - deploy-service 

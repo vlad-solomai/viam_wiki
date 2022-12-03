@@ -1,0 +1,3 @@
+--- 
+- name: Create a container 
+  shell: 'docker run -d --name {{ image_name }}-3 --network=sys --volume="/opt/sys/service/service.properties:/conf/service.properties" --volume="/opt/sys/service:/logs" {{ repo_url }}/{{ image_name }}:{{ image_tag }}'
