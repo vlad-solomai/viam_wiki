@@ -11,3 +11,7 @@ There are scripts with code templates for different tasks
 - `update_https_page.sh` - template for Jenkins job; automate update link in https page
 - `monitoring_errors.sh` - template for monitoring; monitor errors using different cases
 - `info_from_database.groovy` - template for Jenkins job; get information from database
+- `create_patch.sh` - template to patch the file
+- `jenkins_copy_job.sh` - template download/upload job config
+- `rotation_scenario.sh` - template to rotate files
+
