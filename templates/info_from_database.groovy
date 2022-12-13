@@ -39,3 +39,18 @@ if (ENVIRONMENT.equals("pre-prod")) {
 
     return operator_name
 }
+
+// --------------------------------------------------------------------------
+
+import groovy.sql.Sql
+
+def output = []
+
+def sql=Sql.newInstance("jdbc:mysql://HOST:PORT/DATABASE", "user", "password", "com.mysql.jdbc.Driver")
+def sqlString="select distinct(operator_name) from mv_finance_report where payment_date>='$START_PAYMENT_DATE' and payment_date<'$FINISH_PAYMENT_DATE' and operator_name like '%GVC%';"
+
+sql.eachRow(sqlString) {
+    output.push(it[0])
+    }  
+    sql.close()
+    return output

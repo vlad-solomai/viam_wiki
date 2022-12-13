@@ -284,3 +284,78 @@ Check after resizing
  tmpfs 6.2G 0 6.2G 0% /run/user/1008
 ```
 So we have increased the EBS volume without rebooting and zero downtime.
+
+### How to increase the swap size from 4GB to 16GB (example)
+1. Before the maintenance please check the next information regarding the system
+```
+> free -m
+total used free shared buffers cached
+Mem: 96333 92067 4265 0 354 1343
+-/+ buffers/cache: 90370 5962
+>>>Swap: 4095 0 4095
+> df -h Filesystem
+Size Used Avail Use% Mounted on
+/dev/mapper/vg_p1sdb01-lv_update_root 20G 11G 8.6G 55% /
+tmpfs 48G 0 48G 0% /dev/shm
+/dev/sda1 485M 119M 341M 26% /boot
+>>>/dev/mapper/vg_p1sdb01-lv_porta_var 816G 239G 537G 31% /porta_var
+/dev/mapper/vg_p1sdb01-lv_root 20G 11G 7.8G 59% /update_root
+> lsblk
+NAME MAJ:MIN RM SIZE RO TYPE MOUNTPOINT
+sda 8:0 0 893.3G 0 disk
+|-sda1 8:1 0 500M 0 part /boot
+`-sda2 8:2 0 892.8G 0 part
+|-vg_p1sdb01-lv_root (dm-0) 253:0 0 20G 0 lvm /update_root
+|-vg_p1sdb01-lv_update_root (dm-1) 253:1 0 20G 0 lvm /
+>>>|-vg_p1sdb01-lv_porta_var (dm-2) 253:2 0 828.8G 0 lvm /porta_var
+`-vg_p1sdb01-lv_swap (dm-3) 253:3 0 4G 0 lvm [SWAP]
+```
+2. Starting the maintenance. The command below is used in order to found out those processes
+```
+> sudo lsof /dev/mapper/vg_p1sdb01-lv_porta_var | awk '{ print $1,$2 }' | sort | uniq
+COMMAND PID
+mysqld 450
+apache 27391
+```
+3. Stop all tasks
+```
+> mysql -u root
+mysql> slave stop
+sudo mysqld stop
+sudo service apache stop
+```
+4. When all processes will be stopped
+```
+> sudo umount /dev/mapper/vg_p1sdb01-lv_porta_var
+> lsblk (vg_p1sdb01-lv_porta_var) need to check
+> sudo e2fsck -f /dev/mapper/vg_p1sdb01-lv_porta_var
+> sudo resize2fs /dev/mapper/vg_p1sdb01-lv_porta_var 12G
+> sudo lvreduce -L-12G /dev/mapper/vg_p1sdb01-lv_porta_var
+> sudo resize2fs /dev/mapper/vg_p1sdb01-lv_porta_var
+> sudo lvextend -L+12G /dev/mapper/vg_p1sdb01-lv_swap
+> sudo swapoff -v /dev/mapper/vg_p1sdb01-lv_swap
+> sudo mkswap /dev/mapper/vg_p1sdb01-lv_swap
+> sudo swapon -v /dev/mapper/vg_p1sdb01-lv_swap
+> sudo mount /dev/mapper/vg_p1sdb01-lv_porta_var /porta_var
+```
+5. Start all previous services
+```
+> sudo porta-mysqld start
+> sudo service apache start
+> mysql -u root
+mysql> slave start
+```
+6. Сheck the results of the maintenance
+```
+> df -h
+> free -m
+> lsblk
+mysql> slave status
+
+Results: the swap size should be changed from 4GB to 16GB on SlaveDB.
+ 
+ > lsblk
+ ......
+ vg_p1sdb01-lv_swap (dm-3) 253:3 0 16G 0 lvm [SWAP]
+```
+
